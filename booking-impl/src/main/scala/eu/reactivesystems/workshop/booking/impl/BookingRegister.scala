@@ -46,6 +46,18 @@ class BookingRegister extends PersistentEntity {
           ctx.thenPersist(BookingRequested(bookingId, bookingRequest))(event => ctx.reply(event.bookingId))
         }
     }
+    .onCommand[UnlistRoom.type, Done] {
+      case (UnlistRoom, ctx, state) =>
+        ctx.reply(Done)
+        ctx.done
+      }
+    .onCommand[CancelBooking, Done] {
+      case (CancelBooking(bookingId), ctx, state) =>
+        state.requestedBookings.get(bookingId.toString).fold {
+          ctx.invalidCommand("No such booking")
+          ctx.done
+        } ( _ => ctx.thenPersist(BookingCancelled(bookingId))(event => ctx.reply(Done)))
+    }
     .onEvent{
       case (BookingRequested(bookingId, bookingData), state) => {
         state.copy(requestedBookings = state.requestedBookings +
@@ -58,6 +70,12 @@ class BookingRegister extends PersistentEntity {
           )))
       }
     }
+    .onEvent{
+      case (BookingCancelled(bookingId), state) =>
+        state.copy(requestedBookings = state.requestedBookings - bookingId.toString)
+    }
+
+  //private def cancelAction =
 
 }
 
@@ -107,8 +125,32 @@ case class RejectBooking(id: UUID) extends BookingRegisterCommand with ReplyType
 case class WithdrawBooking(id: UUID) extends BookingRegisterCommand with ReplyType[Done]
 case class ModifyBooking(request: BookingRequest) extends BookingRegisterCommand with ReplyType[Done]
 
-case object ListRoom extends BookingRegisterCommand with ReplyType[Done]
-case object UnlistRoom extends BookingRegisterCommand with ReplyType[Done]
+case object ListRoom extends BookingRegisterCommand with ReplyType[Done] {
+  implicit val format: Format[ListRoom.type] = singletonFormat(ListRoom)
+}
+case object UnlistRoom extends BookingRegisterCommand with ReplyType[Done] {
+  implicit val format: Format[UnlistRoom.type] = singletonFormat(UnlistRoom)
+}
+
+object RequestBooking {
+  implicit val format: Format[RequestBooking] = Json.format
+}
+
+object CancelBooking {
+  implicit val format: Format[CancelBooking] = Json.format
+}
+
+object ConfirmBooking {
+  implicit val format: Format[ConfirmBooking] = Json.format
+}
+
+object RejectBooking {
+  implicit val format: Format[RejectBooking] = Json.format
+}
+
+//case object ListRoom {
+//  implicit val format: Format[ListRoom.type] = singletonFormat((ListRoom))
+//}
 
 
 /**
@@ -122,7 +164,22 @@ object BookingRegisterEvent {
   val Tag = AggregateEventTag[BookingRegisterEvent]
 }
 
-case object RoomListed extends BookingRegisterEvent
-case object RoomUnlisted extends BookingRegisterEvent
+case object RoomListed extends BookingRegisterEvent {
+  implicit val format: Format[RoomListed.type] = singletonFormat(RoomListed)
+}
+
+case object RoomUnlisted extends BookingRegisterEvent {
+  implicit val format: Format[RoomUnlisted.type] = singletonFormat(RoomUnlisted)
+}
 
 case class BookingRequested(bookingId: UUID, data: BookingRequest) extends BookingRegisterEvent
+
+object BookingRequested {
+  implicit val format: Format[BookingRequested] = Json.format
+}
+
+case class BookingCancelled(bookingId: UUID) extends BookingRegisterEvent
+
+object BookingCancelled {
+  implicit val format: Format[BookingCancelled] = Json.format
+}
